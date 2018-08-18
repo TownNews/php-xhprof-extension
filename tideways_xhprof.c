@@ -24,10 +24,30 @@ PHP_INI_END()
 PHP_FUNCTION(tideways_xhprof_enable)
 {
     zend_long flags = 0;
-    zval zOptions;
+    zval *zOptions = NULL;
+    zval *zIgnoredTemp = NULL;
+    zval *zTemp = NULL;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|lz", &flags, &zOptions) == FAILURE) {
+    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|la", &flags, &zOptions) == FAILURE) {
         return;
+    }
+
+    if(!TXRG(htIgnoredFuncs)) {
+        ALLOC_HASHTABLE(TXRG(htIgnoredFuncs));
+        zend_hash_init(TXRG(htIgnoredFuncs), 0, NULL, ZVAL_PTR_DTOR, 0);
+    } else {
+        zend_hash_clean(TXRG(htIgnoredFuncs));
+    }
+
+    if (zOptions != NULL && Z_TYPE_P(zOptions) == IS_ARRAY) {
+       zIgnoredTemp = zend_hash_str_find(HASH_OF(zOptions), "ignored_functions", sizeof("ignored_functions")-1);
+       if (zIgnoredTemp != NULL && Z_TYPE_P(zIgnoredTemp) == IS_ARRAY) {
+          ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(zIgnoredTemp), zTemp) {
+	     if (Z_TYPE_P(zTemp) == IS_STRING) {
+                 zend_hash_add_empty_element(TXRG(htIgnoredFuncs), Z_STR_P(zTemp));
+	     }
+          } ZEND_HASH_FOREACH_END();
+       }
     }
 
     tracing_begin(flags TSRMLS_CC);
@@ -58,6 +78,7 @@ PHP_FUNCTION(tideways_xhprof_begin_frame)
 
 PHP_FUNCTION(tideways_xhprof_end_frame)
 {
+
 	if (TXRG(callgraph_frames)) {
 		tracing_exit_frame_callgraph(TSRMLS_C);
 	}
@@ -109,6 +130,7 @@ PHP_RINIT_FUNCTION(tideways_xhprof)
     tracing_request_init(TSRMLS_C);
     tracing_determine_clock_source(TSRMLS_C);
 
+    TXRG(htIgnoredFuncs) = NULL;
     return SUCCESS;
 }
 
@@ -130,6 +152,12 @@ PHP_RSHUTDOWN_FUNCTION(tideways_xhprof)
     }
 
     tracing_request_shutdown();
+
+    if(TXRG(htIgnoredFuncs)) {
+        zend_hash_destroy(TXRG(htIgnoredFuncs));
+        FREE_HASHTABLE(TXRG(htIgnoredFuncs));
+        TXRG(htIgnoredFuncs) = NULL;
+    }
 
     return SUCCESS;
 }
@@ -211,10 +239,32 @@ ZEND_DLEXPORT void tideways_xhprof_execute_internal(zend_execute_data *execute_d
 ZEND_DLEXPORT void tideways_xhprof_execute_ex (zend_execute_data *execute_data) {
     zend_execute_data *real_execute_data = execute_data;
     int is_profiling = 0;
+    zend_string *callable_name = NULL;
 
     if (!TXRG(enabled)) {
         _zend_execute_ex(execute_data TSRMLS_CC);
         return;
+    }
+
+    if (TXRG(htIgnoredFuncs) && zend_hash_num_elements(TXRG(htIgnoredFuncs))) {
+
+       if (execute_data->func && execute_data->func->common.function_name) {
+
+          if (execute_data->func->common.scope) {
+             callable_name = strpprintf(0, "%s::%s", ZSTR_VAL(execute_data->func->common.scope->name), ZSTR_VAL(execute_data->func->common.function_name));
+          } else {
+	     callable_name = zend_string_copy(execute_data->func->common.function_name);
+          }
+
+          if(callable_name) {
+             if (zend_hash_find(TXRG(htIgnoredFuncs), callable_name)) {
+                 _zend_execute_ex(execute_data TSRMLS_CC);
+                 zend_string_release(callable_name);
+                 return;
+             }
+             zend_string_release(callable_name);
+          }
+       }
     }
 
     is_profiling = tracing_enter_frame_callgraph(NULL, real_execute_data TSRMLS_CC);

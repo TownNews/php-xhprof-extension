@@ -81,6 +81,7 @@ ZEND_BEGIN_MODULE_GLOBALS(tideways_xhprof)
     long int num_alloc;
     long int num_free;
     long int amount_alloc;
+    HashTable *htIgnoredFuncs;
 ZEND_END_MODULE_GLOBALS(tideways_xhprof)
 
 #if defined(__GNUC__) && __GNUC__ >= 4
