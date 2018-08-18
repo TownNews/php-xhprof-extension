@@ -107,7 +107,7 @@ PHP_MINIT_FUNCTION(tideways_xhprof)
     REGISTER_LONG_CONSTANT("TIDEWAYS_XHPROF_FLAGS_MEMORY_ALLOC_AS_MU", TIDEWAYS_XHPROF_FLAGS_MEMORY_ALLOC_AS_MU, CONST_CS | CONST_PERSISTENT);
 
 #ifdef TNPROF
-    REGISTER_LONG_CONSTANT("TNPROF_FLAGS_MEMORY", TIDEWAYS_XHPROF_FLAGS_MEMORY, CONST_CS | CONST_PERSISTENT);
+    REGISTER_LONG_CONSTANT("TNPROF_FLAGS_MEMORY", TIDEWAYS_XHPROF_FLAGS_MEMORY | TIDEWAYS_XHPROF_FLAGS_MEMORY_ALLOC | TIDEWAYS_XHPROF_FLAGS_MEMORY_ALLOC_AS_MU, CONST_CS | CONST_PERSISTENT);
     REGISTER_LONG_CONSTANT("TNPROF_FLAGS_CPU", TIDEWAYS_XHPROF_FLAGS_CPU, CONST_CS | CONST_PERSISTENT);
 #endif
 
@@ -218,7 +218,8 @@ PHP_MINFO_FUNCTION(tideways_xhprof)
 ZEND_DLEXPORT void tideways_xhprof_execute_internal(zend_execute_data *execute_data, zval *return_value) {
     int is_profiling = 1;
 
-    if (!TXRG(enabled) || (TXRG(flags) & TIDEWAYS_XHPROF_FLAGS_NO_BUILTINS) > 0) {
+    if (!TXRG(enabled) || ((TXRG(flags) & TIDEWAYS_XHPROF_FLAGS_NO_BUILTINS) > 0) ||
+        zend_string_equals_literal(execute_data->func->common.function_name, "tnprof_function_begin")) {
         execute_internal(execute_data, return_value TSRMLS_CC);
         return;
     }
@@ -285,8 +286,8 @@ const zend_function_entry tideways_xhprof_functions[] = {
 #ifdef TNPROF
     /* Aliases */
 
-	PHP_FALIAS(tnprof_enable, tideways_xhprof_enable, NULL)
-	PHP_FALIAS(tnprof_disable, tideways_xhprof_disable, NULL)
+    PHP_FALIAS(tnprof_enable, tideways_xhprof_enable, NULL)
+    PHP_FALIAS(tnprof_disable, tideways_xhprof_disable, NULL)
     PHP_FALIAS(tnprof_function_begin, tideways_xhprof_begin_frame, NULL)
     PHP_FALIAS(tnprof_function_end, tideways_xhprof_end_frame, NULL)
 #endif
