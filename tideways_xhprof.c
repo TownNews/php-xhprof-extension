@@ -219,7 +219,7 @@ ZEND_DLEXPORT void tideways_xhprof_execute_internal(zend_execute_data *execute_d
     int is_profiling = 1;
 
     if (!TXRG(enabled) || ((TXRG(flags) & TIDEWAYS_XHPROF_FLAGS_NO_BUILTINS) > 0) ||
-        zend_string_equals_literal(execute_data->func->common.function_name, "tnprof_function_begin")) {
+        (strncmp(ZSTR_VAL(execute_data->func->common.function_name), "tnprof_", 7) == 0)) {
         execute_internal(execute_data, return_value TSRMLS_CC);
         return;
     }
